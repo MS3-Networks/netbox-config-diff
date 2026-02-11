@@ -1,0 +1,19 @@
+# TiMOS-B-24.7.R1 both/x86_64 Nokia 7750 SR
+# Generated WED JAN 15 10:30:00 2025 UTC
+configure {
+    service {
+        customer "27929" {
+            description "Cust: account_id 23 [1G] {SER27929}"
+        }
+        epipe "27929" {
+            admin-state enable
+            description "Cust: account_id 23 [1G] {SER27929}"
+            customer "27929"
+            service-mtu 9100
+            spoke-sdp 228:1 {
+            }
+            sap 1/1/c6/1:23.95 {
+            }
+        }
+    }
+}

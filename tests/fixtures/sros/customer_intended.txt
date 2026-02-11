@@ -1,0 +1,15 @@
+# TiMOS-B-24.7.R1 both/x86_64 Nokia 7750 SR
+# Generated WED JAN 15 10:30:00 2025 UTC
+configure {
+    service {
+        customer "11271" {
+            description "Cust: account_id 36 [1G] {SER11271}"
+        }
+        customer "11272" {
+            description "Cust: account_id 15 [1G] {SER11272} - UPGRADED"
+        }
+        customer "11274" {
+            description "Cust: account_id 20 [10G] {SER11274}"
+        }
+    }
+}

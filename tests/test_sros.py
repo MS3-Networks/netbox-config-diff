@@ -260,3 +260,299 @@ class TestSrosFixtures:
 
         # QoS changes in service VPRN
         assert "qos 20" in result
+
+
+class TestSrosCustomerServices:
+    """Tests for Nokia SROS customer service definitions."""
+
+    FIXTURES = Path(__file__).parent / "fixtures" / "sros"
+
+    def test_customer_description_change(self):
+        """Changing a customer description generates correct patch."""
+        running = (self.FIXTURES / "customer_running.txt").read_text()
+        intended = (self.FIXTURES / "customer_intended.txt").read_text()
+
+        result = get_sros_remediation("sr2s-oh-pe", running, intended)
+
+        # Customer 11272 description changed
+        assert 'customer "11272"' in result
+        assert "UPGRADED" in result
+
+        # Customer 11274 added (new)
+        assert 'customer "11274"' in result
+        assert "account_id 20" in result
+
+        # Customer 11273 removed
+        assert "delete" in result
+        assert '"11273"' in result
+
+    def test_customer_patch_is_valid_mdcli(self):
+        """Customer patch output is valid hierarchical MD-CLI."""
+        running = (self.FIXTURES / "customer_running.txt").read_text()
+        intended = (self.FIXTURES / "customer_intended.txt").read_text()
+
+        result = get_sros_remediation("sr2s-oh-pe", running, intended)
+        assert result.startswith("configure {")
+        assert result.count("{") == result.count("}")
+
+    def test_customer_no_change(self):
+        """Identical customer configs produce no output."""
+        running = (self.FIXTURES / "customer_running.txt").read_text()
+        result = get_sros_remediation("sr2s-oh-pe", running, running)
+        assert result == ""
+
+
+class TestSrosEpipeL2:
+    """Tests for Nokia SROS Epipe L2 services (SAP + spoke-SDP)."""
+
+    FIXTURES = Path(__file__).parent / "fixtures" / "sros"
+
+    def test_epipe_l2_sap_and_sdp_change(self):
+        """Changing SAP and spoke-SDP generates correct patch."""
+        running = (self.FIXTURES / "epipe_l2_running.txt").read_text()
+        intended = (self.FIXTURES / "epipe_l2_intended.txt").read_text()
+
+        result = get_sros_remediation("sr2s-oh-pe", running, intended)
+
+        # Description updated
+        assert "Updated" in result
+
+        # New spoke-sdp added
+        assert "spoke-sdp 230:5" in result
+
+        # Old spoke-sdp deleted
+        assert "delete" in result
+        assert "228:1" in result
+
+        # New SAP added
+        assert "sap 1/1/c6/1:23.100" in result
+
+        # Old SAP deleted
+        assert "23.95" in result
+
+    def test_epipe_l2_patch_is_valid_mdcli(self):
+        """Epipe L2 patch output is valid hierarchical MD-CLI."""
+        running = (self.FIXTURES / "epipe_l2_running.txt").read_text()
+        intended = (self.FIXTURES / "epipe_l2_intended.txt").read_text()
+
+        result = get_sros_remediation("sr2s-oh-pe", running, intended)
+        assert result.startswith("configure {")
+        assert result.count("{") == result.count("}")
+
+    def test_epipe_l2_service_structure(self):
+        """Verify correct service hierarchy in output."""
+        running = (self.FIXTURES / "epipe_l2_running.txt").read_text()
+        intended = (self.FIXTURES / "epipe_l2_intended.txt").read_text()
+
+        result = get_sros_remediation("sr2s-oh-pe", running, intended)
+
+        # Verify service > epipe hierarchy
+        assert "service {" in result
+        assert 'epipe "27929"' in result
+
+
+class TestSrosEpipeL3:
+    """Tests for Nokia SROS Epipe L3 services (multiple SAPs)."""
+
+    FIXTURES = Path(__file__).parent / "fixtures" / "sros"
+
+    def test_epipe_l3_sap_replacement(self):
+        """Replacing a SAP in L3 config generates correct patch."""
+        running = (self.FIXTURES / "epipe_l3_running.txt").read_text()
+        intended = (self.FIXTURES / "epipe_l3_intended.txt").read_text()
+
+        result = get_sros_remediation("sr2s-oh-pe", running, intended)
+
+        # New LAG SAP added
+        assert "lag-3:16.800" in result
+
+        # Old LAG SAP deleted
+        assert "delete" in result
+        assert "lag-3:16.759" in result
+
+        # First SAP unchanged (should not appear in patch unless ordering)
+        # Note: hier_config may include unchanged parents in output
+
+    def test_epipe_l3_patch_is_valid_mdcli(self):
+        """Epipe L3 patch output is valid hierarchical MD-CLI."""
+        running = (self.FIXTURES / "epipe_l3_running.txt").read_text()
+        intended = (self.FIXTURES / "epipe_l3_intended.txt").read_text()
+
+        result = get_sros_remediation("sr2s-oh-pe", running, intended)
+        assert result.startswith("configure {")
+        assert result.count("{") == result.count("}")
+
+    def test_epipe_l3_additions_before_deletions(self):
+        """New SAP should appear before deleted SAP in output."""
+        running = (self.FIXTURES / "epipe_l3_running.txt").read_text()
+        intended = (self.FIXTURES / "epipe_l3_intended.txt").read_text()
+
+        result = get_sros_remediation("sr2s-oh-pe", running, intended)
+
+        add_pos = result.find("lag-3:16.800")
+        delete_pos = result.find("delete")
+
+        # Addition should come before deletion
+        assert add_pos < delete_pos, "New SAP should appear before delete statements"
+
+
+class TestSrosRealWorldScenarios:
+    """Integration tests simulating real-world SROS remediation scenarios."""
+
+    def test_full_service_provisioning(self):
+        """Test provisioning a complete new epipe service."""
+        running = """configure {
+    service {
+        customer "10100" {
+            description "Cust: account_id 23 [1G] {SER10100}"
+        }
+    }
+}"""
+        intended = """configure {
+    service {
+        customer "10100" {
+            description "Cust: account_id 23 [1G] {SER10100}"
+        }
+        epipe "10100" {
+            admin-state enable
+            description "Cust: account_id 23 [1G] {SER10100}"
+            customer "10100"
+            service-mtu 9100
+            spoke-sdp 23:10605 {
+            }
+            sap esat-1/1/36:44.24 {
+            }
+        }
+    }
+}"""
+        result = get_sros_remediation("sr2s-oh-pe", running, intended)
+
+        # New epipe should be fully provisioned
+        assert 'epipe "10100"' in result
+        assert "admin-state enable" in result
+        assert 'customer "10100"' in result
+        assert "service-mtu 9100" in result
+        assert "spoke-sdp 23:10605" in result
+        assert "sap esat-1/1/36:44.24" in result
+
+        # No deletes for pure addition
+        assert "delete" not in result
+
+        # Valid MD-CLI format
+        assert result.startswith("configure {")
+        assert result.count("{") == result.count("}")
+
+    def test_service_decommissioning(self):
+        """Test decommissioning an entire epipe service."""
+        running = """configure {
+    service {
+        customer "10550" {
+            description "Cust: account_id 5 [1G] {SER10550}"
+        }
+        epipe "10550" {
+            admin-state enable
+            description "Cust: account_id 5 [1G] {SER10550}"
+            customer "10550"
+            service-mtu 9100
+            spoke-sdp 210:12750 {
+            }
+            sap lag-5:36.664 {
+            }
+        }
+    }
+}"""
+        intended = """configure {
+    service {
+        customer "10550" {
+            description "Cust: account_id 5 [1G] {SER10550}"
+        }
+    }
+}"""
+        result = get_sros_remediation("sr2s-oh-pe", running, intended)
+
+        # Entire epipe should be deleted
+        assert "delete" in result
+        assert 'epipe "10550"' in result
+
+        # Valid MD-CLI format
+        assert result.startswith("configure {")
+        assert result.count("{") == result.count("}")
+
+    def test_sap_migration(self):
+        """Test migrating a SAP from one port to another."""
+        running = """configure {
+    service {
+        epipe "10551" {
+            admin-state enable
+            customer "10551"
+            service-mtu 9100
+            spoke-sdp 210:2424 {
+            }
+            sap esat-1/1/31:40.28 {
+            }
+        }
+    }
+}"""
+        intended = """configure {
+    service {
+        epipe "10551" {
+            admin-state enable
+            customer "10551"
+            service-mtu 9100
+            spoke-sdp 210:2424 {
+            }
+            sap esat-1/1/32:40.28 {
+            }
+        }
+    }
+}"""
+        result = get_sros_remediation("sr2s-oh-pe", running, intended)
+
+        # New SAP added
+        assert "esat-1/1/32:40.28" in result
+
+        # Old SAP deleted
+        assert "delete" in result
+        assert "esat-1/1/31:40.28" in result
+
+        # Addition should come before deletion
+        add_pos = result.find("esat-1/1/32:40.28")
+        delete_pos = result.find("delete")
+        assert add_pos < delete_pos
+
+    def test_spoke_sdp_change(self):
+        """Test changing spoke-SDP binding."""
+        running = """configure {
+    service {
+        epipe "10552" {
+            admin-state enable
+            customer "10552"
+            service-mtu 9100
+            spoke-sdp 231:7 {
+            }
+            sap 1/1/c6/1:15.2856 {
+            }
+        }
+    }
+}"""
+        intended = """configure {
+    service {
+        epipe "10552" {
+            admin-state enable
+            customer "10552"
+            service-mtu 9100
+            spoke-sdp 231:8 {
+            }
+            sap 1/1/c6/1:15.2856 {
+            }
+        }
+    }
+}"""
+        result = get_sros_remediation("sr2s-oh-pe", running, intended)
+
+        # New spoke-sdp added
+        assert "spoke-sdp 231:8" in result
+
+        # Old spoke-sdp deleted
+        assert "delete" in result
+        assert "231:7" in result
