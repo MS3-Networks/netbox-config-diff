@@ -1,0 +1,19 @@
+# TiMOS-B-24.7.R1 both/x86_64 Nokia 7750 SR
+# Generated WED JAN 15 10:30:00 2025 UTC
+configure {
+    service {
+        customer "10544" {
+            description "Cust: account_id 15 [1G] {SER10544}"
+        }
+        epipe "10544" {
+            admin-state enable
+            description "Cust: account_id 15 [1G] {SER10544}"
+            customer "10544"
+            service-mtu 9100
+            sap 1/1/c6/1:15.2851 {
+            }
+            sap lag-3:16.800 {
+            }
+        }
+    }
+}
