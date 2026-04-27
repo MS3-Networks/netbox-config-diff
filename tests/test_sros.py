@@ -1,8 +1,5 @@
 import importlib.util
-import sys
 from pathlib import Path
-
-import pytest
 
 # Import sros module directly to avoid triggering netbox_config_diff.__init__
 # which requires Django/NetBox
